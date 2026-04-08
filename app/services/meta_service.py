@@ -1,41 +1,56 @@
-from datetime import datetime, timedelta
-import random
+import os
+import dotenv
+import requests
 
-def get_campaign_insights():
-    campaign_name = "Campanha Black Friday 2025"
-    ad_account_id = "act_123456789"
+def get_facebook_ads_data():
+    dotenv.load_dotenv()
+    access_token = os.getenv("META_ACCESS_TOKEN")
+    ad_account_id = os.getenv("META_AD_ACCOUNT_ID")
+    api_version = os.getenv("META_API_VERSION")
+
+    url = f"https://graph.facebook.com/{api_version}/{ad_account_id}/insights"
+    params = {
+        "access_token": access_token,
+        "fields": "campaign_name,impressions,clicks,spend, actions, action_values",
+        "date_preset": "last_30d",
+        "time_increment": "1",
+        "level": "campaign"}
+
+    data = requests.get(url, params=params).json()
+
+    if 'error' in data:
+        print(f"Erro ao obter dados do Facebook Ads: {data['error']['message']}")
+        return []
+    else:
+        return data.get("data", [])
     
-    insights = []
 
-    for i in range(30):
-        date = datetime.today() - timedelta(days=29-i)
-
-        impressions = random.randint(5000, 20000)
-        clicks = random.randint(100, 800)
-        spend = round(random.uniform(100.0, 1000.0), 2)
-        conversions = random.randint(10, 50)
-        revenue = round(conversions * random.uniform(20.0, 100.0), 2)
-
-        ctr = round(clicks / impressions * 100, 2)
-        cpc = round(spend / clicks, 2)
-        cpm = round(spend / impressions * 1000, 2)
-        roas = round(revenue / spend, 2)
-
-        insights.append({
-            "date": date.strftime("%Y-%m-%d"),
-            "campaign_name": campaign_name,
-            "ad_account_id": ad_account_id,
-            "impressions": impressions,
-            "clicks": clicks,
-            "spend": spend,
-            "conversions": conversions,
-            "revenue": revenue,
-            "ctr": ctr,
-            "cpc": cpc,
-            "cpm": cpm,
-            "roas": roas
+def formatar_insights(raw_insights):
+    insights_formatados = []
+    for item in raw_insights:
+        clicks = int(item.get('clicks', 0)) if raw_insights else 0
+        impressions = int(item.get('impressions', 0)) if raw_insights else 0
+        spend = float(item.get('spend', 0)) if raw_insights else 0
+        insights_formatados.append({
+            'date': item.get('date_start'),
+            'campaign_name': item.get('campaign_name'),
+            'ad_account_id': os.getenv("META_AD_ACCOUNT_ID"),
+            'impressions': int(item.get('impressions', 0)),
+            'clicks': int(item.get('clicks', 0)),
+            'spend': float(item.get('spend', 0)),
+            'conversions': int(next((action['value'] for action in item.get('actions', []) if action['action_type'] == 'purchase'), 0)),
+            'revenue': float(next((action_value['value'] for action_value in item.get('action_values', []) if action_value['action_type'] == 'purchase'), 0)),
+            'ctr': clicks / impressions if impressions > 0 else 0,
+            'cpc': spend / clicks if clicks > 0 else 0,
+            'cpm': (spend / impressions) * 1000 if impressions > 0 else 0,
+            'roas': (float(next((action_value['value'] for action_value in item.get('action_values', []) if action_value['action_type'] == 'purchase'), 0)) / spend) if spend > 0 else 0
         })
+    return insights_formatados
 
-    return insights
+
+
+
+
+
 
     
