@@ -3,6 +3,7 @@ import pandas as pd
 import plotly.graph_objects as go
 from fpdf import FPDF
 from datetime import datetime
+from groq import Groq
 
 LOGO_PATH = "assets/logo hnh.jpg"
 OUTPUT_PATH = "reports/"
@@ -59,12 +60,13 @@ def gerar_pdf(insights: list) -> str:
     convvalue = df["revenue"].sum()
     roas = round(convvalue / spd, 2) if spd > 0 else 0
 
+    analise_ia = analisar_com_ia(imp, clk, spd, conv, ctr_medio, cpm_medio, cpl, convvalue, roas, datamin, datamax)
+
     graficos = gerar_graficos(df)
     pdf = FPDF()
     pdf.add_page()
     pdf.set_margins(10, 10, 10)
 
-    # --- CABEÇALHO VERDE COM LOGO E TÍTULO ---
     pdf.set_fill_color(*VERDE_ESCURO)
     pdf.rect(0, 0, 210, 30, "F")
     pdf.image(LOGO_PATH, x=5, y=3, h=24)
@@ -73,7 +75,6 @@ def gerar_pdf(insights: list) -> str:
     pdf.set_text_color(*BRANCO)
     pdf.cell(210, 10, f"Relatório Meta ADS - {datamin} a {datamax}", align="C")
 
-    # --- FAIXA OVERVIEW ---
     pdf.set_fill_color(*VERDE_ESCURO)
     pdf.rect(0, 33, 210, 12, "F")
     pdf.set_xy(0, 33)
@@ -81,7 +82,6 @@ def gerar_pdf(insights: list) -> str:
     pdf.set_text_color(*BRANCO)
     pdf.cell(210, 12, "OVERVIEW GERAL DA CAMPANHA", align="C")
 
-    # --- MÉTRICAS LINHA 1 ---
     metricas = [
         ("Impressões", f"{imp:,}"),
         ("Cliques", f"{clk:,}"),
@@ -114,7 +114,6 @@ def gerar_pdf(insights: list) -> str:
         pdf.set_text_color(*VERDE_ESCURO)
         pdf.cell(box_w, 6, valor, align="C")
 
-    # --- MÉTRICAS LINHA 2 ---
     y_start2 = y_start + box_h + 4
     for i, (nome, valor) in enumerate(metricas_linha2):
         x = x_start + i * (box_w + 2)
@@ -128,11 +127,31 @@ def gerar_pdf(insights: list) -> str:
         pdf.set_text_color(*VERDE_ESCURO)
         pdf.cell(box_w, 6, valor, align="C")
 
-    # --- GRÁFICOS ---
     y_graficos = y_start2 + box_h + 6
     for caminho in graficos:
         pdf.image(caminho, x=10, y=y_graficos, w=190)
         y_graficos += 68
+
+    
+    pdf.add_page()
+    pdf.set_margins(10, 10, 10)
+    pdf.set_fill_color(*VERDE_ESCURO)
+    pdf.rect(0, 0, 210, 30, "F")
+    pdf.image(LOGO_PATH, x=5, y=3, h=24)
+    pdf.set_xy(0, 8)
+
+    pdf.set_fill_color(*VERDE_ESCURO)
+    pdf.rect(0, 33, 210, 12, "F")
+    pdf.set_xy(0, 33)
+    pdf.set_font("Arial", "B", 12)
+    pdf.set_text_color(*BRANCO)
+    pdf.cell(210, 12, "ANALISE E PROXIMOS PASSOS", align="C")
+
+    pdf.set_xy(10, 50)
+    pdf.set_font("Arial", "", 12)
+    pdf.set_text_color(*CINZA)
+    pdf.multi_cell(0, 8, analise_ia)
+    
 
     os.makedirs(OUTPUT_PATH, exist_ok=True)
     saida = f"{OUTPUT_PATH}relatorio_{df['date'].min().strftime('%Y%m%d')}_{df['date'].max().strftime('%Y%m%d')}.pdf"
@@ -140,3 +159,39 @@ def gerar_pdf(insights: list) -> str:
     for caminho in graficos:
         os.remove(caminho)
     return saida
+    
+
+def analisar_com_ia(imp, clk, spd, conv, ctr_medio, cpm_medio, cpl, convvalue, roas, datamin, datamax):
+    client = Groq(api_key=os.getenv("GROQ_API_KEY"))
+    
+    prompt = f"""
+    Você é um especialista em marketing digital e Meta ADS.
+    Analise os seguintes dados de campanha e forneça insights práticos em português:
+
+    Período: {datamin} a {datamax}
+    - Impressões: {imp:,}
+    - Cliques: {clk:,}
+    - Gasto total: R$ {spd:,.2f}
+    - Conversões: {conv:,}
+    - CTR médio: {ctr_medio}%
+    - CPM médio: R$ {cpm_medio:,.2f}
+    - CPL: R$ {cpl:,.2f}
+    - Receita gerada: R$ {convvalue:,.2f}
+    - ROAS: {roas}
+
+    Forneça:
+    1. Avaliação geral da performance (2 linhas)
+    2. Pontos positivos (2 bullet points)
+    3. Pontos de atenção (2 bullet points)
+    4. Recomendações práticas (2 bullet points)
+
+    Seja direto e objetivo. Máximo 15 linhas no total.
+    """
+    
+    resposta = client.chat.completions.create(
+        model="llama-3.3-70b-versatile",
+        messages=[{"role": "user", "content": prompt}],
+        max_tokens=500
+    )
+    
+    return resposta.choices[0].message.content
