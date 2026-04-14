@@ -1,10 +1,11 @@
 from app.db.database import init_db
 from app.services.meta_service import get_facebook_ads_data, formatar_insights
-from app.services.db_services import salvar_insights, buscar_insights
+from app.services.db_services import salvar_insights
 from app.services.report_service import gerar_pdf
 from app.api.routes import router
 from fastapi import FastAPI
 import uvicorn
+from app.services.schedular import iniciar_scheduler
 
 app = FastAPI()
 
@@ -15,6 +16,7 @@ def startup_event():
     init_db()
     dados = formatar_insights(get_facebook_ads_data())
     salvar_insights(dados)
+    iniciar_scheduler()
     print(f"Dados recebidos: {len(dados)} insights formatados e salvos no banco de dados.")
     print(dados[0] if dados else "Nenhum dado recebido.")
     if dados:
